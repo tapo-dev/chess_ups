@@ -1,0 +1,24 @@
+{
+    "name": "KIV/UPS Bonus 2 (C++)",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools"
+            ]
+        }
+    },
+
+    "containerEnv": {
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8"
+    },
+
+    "forwardPorts": [10000],
+
+    "remoteUser": "dev"
+}
