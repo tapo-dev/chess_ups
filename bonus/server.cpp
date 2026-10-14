@@ -1,128 +1,228 @@
-/*
- * KIV/UPS - priklady sitoveho programovani
- *
- * Zakladni TCP server
- * Ve vsech prikladech na TCP v teto slozce je fungovani serveru identicke:
- *   - vytvori socket
- *   - binduje na 127.0.0.1:10000
- *   - prijima spojeni
- *   - prijima znaky a odesila je invertovane (A -> Z, B -> Y, ...)
- *   - zavre sockety po ukonceni komunikace
- * 
- * V teto variante je i paralelni odbaveni klientu:
- *   Kazdy klient je obslouzen pomoci poll(), tj. server muze obsluhovat vice klientu soucasne bez vytvareni novych vlaken
- * 
- * poll je modernejsi varianta nez select(), podporuje vice socketu a nema omezeni na nejvyssi cislo socketu
- */
-
-#include <stdlib.h>
-#include <stdio.h>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <unordered_map>
 
 #include <arpa/inet.h>  // inet_pton, htons, struct sockaddr_in
 #include <sys/socket.h> // socket, bind, listen, accept, send, recv
 #include <unistd.h>     // close
-#include <string.h>     // memset
-#include <poll.h>      // poll
+#include <poll.h>       // poll
 
-#define BIND_ADDRESS "127.0.0.1"
-#define BIND_PORT 10000
+enum class State {
+    WAIT_HELLO,
+    WAIT_ANSWER
+};
 
-int main(int, char**) {
+// Everything the server remembers about one connected client
+struct Client {
+    State state = State::WAIT_HELLO;
+    std::string inbuf;  // received bytes that do not form a complete line yet
+    int sent_num = 0;   // number sent in NUM:, the client must answer with its double
+};
 
-    // vytvorime socket (pozadame system o jeho vytvreni)
-    // AF_INET = IPv4, SOCK_STREAM = TCP (streamovane sluzby), 0 = vychozi protokol
+// Longest unfinished line a client may keep in its buffer
+const size_t MAX_LINE_LENGTH = 256;
+
+// Sends one line (adds the '\n') and returns false if it could not be sent whole
+bool send_line(int fd, const std::string &text) {
+    printf("Sent to socket %d: [%s]\n", fd, text.c_str());
+    std::string text_to_send = text + "\n";
+    ssize_t bytes_sent = send(fd, text_to_send.data(), text_to_send.size(), MSG_NOSIGNAL);
+    if (bytes_sent != (ssize_t)text_to_send.size()) {
+        return false;
+    }
+    return true;
+}
+
+// Reads what is waiting on the socket and moves every complete line
+// from the clients buffer to lines
+bool read_lines(int skt, Client &client, std::vector<std::string> &lines) {
+    char buffer[1024];
+    ssize_t size_received = recv(skt, buffer, sizeof(buffer), 0);
+    // Either error or client closed the connection
+    if (size_received < 0) {
+        perror("recv");
+        return false;
+    }
+    if (size_received == 0) {
+        return false;
+    }
+
+    client.inbuf.append(buffer, size_received);
+
+    size_t line_end;
+    while ((line_end = client.inbuf.find('\n')) != std::string::npos) {
+        lines.push_back(client.inbuf.substr(0, line_end));
+        client.inbuf.erase(0, line_end + 1);
+    }
+
+    // What is left is an unfinished line; refuse to store it forever
+    if (client.inbuf.size() > MAX_LINE_LENGTH) {
+        std::cerr << "Line too long (socket " << skt << ")\n";
+        send_line(skt, "ERROR");
+        return false;
+    }
+
+    return true;
+}
+
+// Helper to check whether a string contains only a number or also characters
+bool is_number(const std::string &s) {
+    if (s == "") {
+        return false;
+    }
+    if (s.size() > 9) {
+        return false;
+    }
+    for (char c : s) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Reacts to one complete line according to the client's state.
+// Returns false when the connection should be closed.
+bool handle_line(int skt, Client &client, const std::string &line) {
+    switch (client.state) {
+        case State::WAIT_HELLO: {
+            if (line != "HELLO") {
+                send_line(skt, "ERROR");
+                return false;
+            }
+            int rand_num = rand() % 101;
+            if (!send_line(skt, "NUM:" + std::to_string(rand_num))) {
+                return false;
+            }
+            client.state = State::WAIT_ANSWER;
+            client.sent_num = rand_num;
+            break;
+        }
+
+        case State::WAIT_ANSWER: {
+            if (!is_number(line)) {
+                send_line(skt, "ERROR");
+                return false;
+            }
+            if (std::stoi(line) != 2 * client.sent_num) {
+                send_line(skt, "WRONG");
+                return false;
+            }
+            // the exchange is over either way, so the connection is closed after OK too
+            send_line(skt, "OK");
+            return false;
+        }
+    }
+    return true;
+}
+
+int main(int argc, char *argv[]) {
+    srand(time(nullptr));
+    if (argc != 3) {
+        std::cerr << "Running server requires IP address and port specified in args\n";
+        exit(EXIT_FAILURE);
+    }
+    int port = atoi(argv[2]);
+    if (port < 1 || port > 65535) {
+        std::cerr << "Invalid port\n";
+        exit(EXIT_FAILURE);
+    }
+    
+    // create the socket (ask the system to create it)
+    // AF_INET = IPv4, SOCK_STREAM = TCP (stream service), 0 = default protocol
     int skt = socket(AF_INET, SOCK_STREAM, 0);
     if (skt < 0) {
         perror("socket");
         exit(EXIT_FAILURE);
     }
 
-    // pripravime strukturu s adresou, na ktere chceme naslouchat
+    // prepare the structure with the address we want to listen on
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(BIND_PORT); // htons = host to network short (prevedeni portu do sitove endianity - big-endian)
-    // inet_pton = prevedeni IP adresy z textove podoby do binarni podoby
-    if (inet_pton(AF_INET, BIND_ADDRESS, &addr.sin_addr) <= 0) {
-        perror("inet_pton");
+    addr.sin_port = htons(port); // htons = host to network short (converts the port to network byte order - big-endian)
+    // inet_pton = converts an IP address from text to binary form
+    if (inet_pton(AF_INET, argv[1], &addr.sin_addr) <= 0) {
+        std::cerr << "Wrong IP address format\n";
         exit(EXIT_FAILURE);
     }
 
     int optval = 1;
-    // nastaveni socketu, aby se po zavreni socketu uvolnila adresa a port, na kterych naslouchal (jinak by se muselo pockat, nez by je system uvolnil)
+    // socket option that frees the address and port as soon as the socket is closed (otherwise we would have to wait until the system releases them)
     if (setsockopt(skt, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
         perror("setsockopt");
         exit(EXIT_FAILURE);
     }
 
-    // priradime socketu adresu, na ktere chceme naslouchat
-    // pozor, jeste neposlouchame, tady jen "svazeme" socket s adresou
+    // assign the socket the address we want to listen on
+    // note: we are not listening yet, this only "binds" the socket to the address
     if (bind(skt, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         perror("bind");
         exit(EXIT_FAILURE);
     }
 
-    // zacneme naslouchat na socketu, ktery jsme si vytvorili a svazali s adresou
-    // toto vytvori i frontu prichozich spojeni (druhy parametr, zde 5) - kolik spojeni muze cekat, nez je server ochoten je prijmout (accept)
+    // start listening on the socket we created and bound to the address
+    // this also creates the queue of incoming connections (second parameter, here 5) - how many connections may wait until the server accepts them
     if (listen(skt, 5) < 0) {
         perror("listen");
         exit(EXIT_FAILURE);
     }
 
-    printf("Listening on %s:%d\n", BIND_ADDRESS, BIND_PORT);
+    printf("Listening on %s:%d\n", argv[1], port);
 
-    struct pollfd fds[16];
+    std::vector<pollfd> fds;
+    std::unordered_map<int, Client> clients;
 
-    for (int i = 0; i < 16; i++) {
-        fds[i].fd = -1; // oznacime jako nepouzite
-    }
-
-    // na zacatku mame jen server socket, ktery naslouchá na prichozí spojeni
-    int nfds = 1;
-    fds[0].fd = skt;
-    fds[0].events = POLLIN;
+    // at the start there is only the server socket, which listens for incoming connections
+    fds.push_back({skt, POLLIN, 0});
 
     while (1) {
-
-        int ret = poll(fds, nfds, -1);
+        int ret = poll(fds.data(), fds.size(), -1);
         if (ret < 0) {
             perror("poll");
             exit(EXIT_FAILURE);
         }
 
-        for (int i = 0; i < nfds; i++) {
+        for (size_t i = 0; i < fds.size(); i++) {
             if (fds[i].revents & POLLIN) {
                 if (fds[i].fd == skt) {
-                    // prijmeme spojeni od klienta
+                    // accept a connection from a client
                     int client_skt = accept(skt, NULL, NULL);
                     if (client_skt < 0) {
                         perror("accept");
-                        exit(EXIT_FAILURE);
+                        std::cerr << "Accepting client failed\n";
+                        continue;
                     }
-                    fds[nfds].fd = client_skt;
-                    fds[nfds].events = POLLIN;
-                    nfds++;
+
+                    printf("Client connected (socket %d)\n", client_skt);
+                    clients[client_skt] = Client{};
+                    fds.push_back({client_skt, POLLIN, 0});
                 } else {
-                    // prijmeme data od klienta
-                    char buffer;
-                    int result = recv(fds[i].fd, &buffer, 1, 0);
+                    // receive data from the client
+                    int client_skt = fds[i].fd;
+                    std::vector<std::string> lines;
+                    bool keep_client = read_lines(client_skt, clients[client_skt], lines);
 
-                    if (result <= 0) {
-                        // klient uzavrel spojeni nebo nastala chyba (vypadek, ...)
-                        printf("Client disconnected (socket %d)\n", fds[i].fd);
-                        close(fds[i].fd);
-                        fds[i].fd = -1; // oznacime jako nepouzite
-
-                        // posuneme vsechny sockety v poli o jednu pozici zpet, aby se nepouzite sockety dostaly na konec pole
-                        for (int j = i; j < nfds - 1; j++) {
-                            fds[j] = fds[j + 1];
+                    for (const std::string &line : lines) {
+                        printf("Received from socket %d: [%s]\n", client_skt, line.c_str());
+                        if (!handle_line(client_skt, clients[client_skt], line)) {
+                            keep_client = false;
+                            break;
                         }
-                        nfds--;
-                        i--; // zmenime index, aby se v dalsim pruchodu cyklu znovu zkontroloval socket, ktery jsme posunuli na misto i
+                    }
 
-                    } else {
-                        printf("Received: %c\n", buffer);
-                        buffer = 'Z' - (buffer - 'A');
-                        send(fds[i].fd, &buffer, 1, 0);
+                    if (!keep_client) {
+                        // the client closed the connection or an error occurred (outage, ...)
+                        printf("Client disconnected (socket %d)\n", client_skt);
+                        close(client_skt);
+
+                        clients.erase(client_skt);
+                        // remove the socket; erase shifts all the following ones one position back
+                        fds.erase(fds.begin() + i);
+                        i--; // step the index back so the next iteration checks the socket that moved to position i
                     }
                 }
             }
