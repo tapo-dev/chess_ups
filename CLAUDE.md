@@ -6,7 +6,7 @@ KIV/UPS semester project: online chess for two players.
 - **Client:** Unity (C#)
 - **Protocol:** custom text protocol over TCP
 
-The course assignment is in `docs/PozadavkyUPS.pdf` (Czech). The repo also holds the course's bonus task, a small TCP server that is the warm-up for the chess server's networking code.
+The course assignment is in `docs/PozadavkyUPS.pdf` (Czech).
 
 ## How to help
 
@@ -24,41 +24,32 @@ Everything else (Makefiles, devcontainer, docs) is normal work.
 
 | Path | Contents |
 |---|---|
-| `bonus/` | Bonus task: standalone HELLO/NUM server, submitted on its own |
 | `server/` | Chess server (C++, built with `make`) |
-| `client/` | Unity client |
+| `client/` | Unity client (Unity 6000.6, 2D URP template, new Input System only) |
 | `docs/` | Course assignment, protocol description, final documentation |
 
-`server/` and `client/` do not exist yet.
-
-`bonus/server.cpp` is still the unmodified course example of a `poll()` server (inverts characters, hard-coded `127.0.0.1:10000`, fixed 16-slot fd array). It is the starting point for the bonus task.
-
-Once the bonus task has been submitted, `bonus/` can be deleted from the repo, along with everything about it in this file.
+`server/server.cpp` is a single-file skeleton grown out of the course's bonus task: `poll()` loop, per-client receive buffer split into lines (`read_lines`), `send_line`, and an empty `handle_line` that answers every line with `ERROR`. The chess protocol does not exist yet.
 
 ## Build and run
 
-Development happens in the devcontainer: Debian 13, g++ 14, make, gdb, valgrind, netcat, port 10000 forwarded.
+Development happens in the devcontainer: Debian 13, g++ 14, make, gdb, valgrind, netcat, port 10000 forwarded. No Python in the container. The Unity Editor runs on the host, outside the container.
 
 ```sh
-cd bonus
-make                  # build ./server (-std=c++17 -Wall -Wextra)
-./server              # listens on 127.0.0.1:10000
-nc 127.0.0.1 10000    # talk to it by hand
+cd server
+make                          # build ./server (-std=c++17 -Wall -Wextra -g)
+./server 127.0.0.1 10000      # <listen address> <port>
+nc 127.0.0.1 10000            # talk to it by hand
 make clean
 ```
 
-## Bonus task protocol
+Reachable from the university network: a school PC or `ares.fav.zcu.cz` (147.228.63.10), where students may use ports 10000-10010 and have little disk space. There, bind to `0.0.0.0`.
 
-Text over TCP. Every message is upper-case and ends with `\n`.
+### Unity client
 
-1. Client sends `HELLO`.
-2. Server replies `NUM:<n>` with a random number, e.g. `NUM:42`.
-3. Client sends the doubled number with no header, e.g. `84`.
-4. Server replies `OK` if it is correct, `WRONG` if not.
-
-On any protocol error (no `HELLO`, the answer is not a number, ...) the server sends `ERROR` and closes the connection at once.
-
-Clients must be served in parallel: a slow client must never block the others. The course test clients (https://kiv-ubl.kiv.zcu.cz/ups/) give up after 7 seconds. For that test the server has to be reachable from the university network: a school PC or `ares.fav.zcu.cz`, ports 10000-10010.
+The Editor runs on the host and the `unity-cli` skill can drive it (Pipeline package is installed;
+project path `client/`). This only works from a host session, not inside the devcontainer.
+Use it to inspect and verify: compile errors, Console, scene hierarchy, play mode, tests, screenshots.
+Do not create or modify scenes, GameObjects, prefabs or scripts through it unless asked.
 
 ## Server rules
 
