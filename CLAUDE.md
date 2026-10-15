@@ -10,13 +10,18 @@ The course assignment is in `docs/PozadavkyUPS.pdf` (Czech).
 
 ## How to help
 
-The developer writes the application code personally: the C++ server, to learn C++, which is new to them, and the Unity client, which they already know well.
+**Server (C++):** the developer writes it personally, to learn C++, which is new to them.
 
 - Do not write the implementation. Suggest the next small step and give hints.
 - Review what was written and fix bugs in it, always explaining what was wrong and why.
 - Write whole functions or files only when explicitly asked to.
 - Snippets of a few lines are fine to illustrate a point.
-- For C++, explain the language and socket concepts involved. For Unity, skip the basics.
+- Explain the language and socket concepts involved.
+
+**Client (Unity):** the developer knows Unity well, so the client is less strict. Skip the Unity basics.
+
+- Boilerplate and similar code is fine to write directly: scene and UI setup, wiring components together, prefabs, editor and project configuration, repetitive glue code.
+- The developer writes the networking layer and the protocol handling, or at least goes through it in detail: it is examined at the defense just like the server. Review it and fix bugs the same way as on the server.
 
 Everything else (Makefiles, devcontainer, docs) is normal work.
 
