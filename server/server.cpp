@@ -1,6 +1,5 @@
 #include <cstdio>
 #include <cstdlib>
-#include <ctime>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -11,16 +10,9 @@
 #include <unistd.h>     // close
 #include <poll.h>       // poll
 
-enum class State {
-    WAIT_HELLO,
-    WAIT_ANSWER
-};
-
 // Everything the server remembers about one connected client
 struct Client {
-    State state = State::WAIT_HELLO;
     std::string inbuf;  // received bytes that do not form a complete line yet
-    int sent_num = 0;   // number sent in NUM:, the client must answer with its double
 };
 
 // Longest unfinished line a client may keep in its buffer
@@ -85,43 +77,16 @@ bool is_number(const std::string &s) {
     return true;
 }
 
-// Reacts to one complete line according to the client's state.
+// Reacts to one complete line from the client.
 // Returns false when the connection should be closed.
-bool handle_line(int skt, Client &client, const std::string &line) {
-    switch (client.state) {
-        case State::WAIT_HELLO: {
-            if (line != "HELLO") {
-                send_line(skt, "ERROR");
-                return false;
-            }
-            int rand_num = rand() % 101;
-            if (!send_line(skt, "NUM:" + std::to_string(rand_num))) {
-                return false;
-            }
-            client.state = State::WAIT_ANSWER;
-            client.sent_num = rand_num;
-            break;
-        }
-
-        case State::WAIT_ANSWER: {
-            if (!is_number(line)) {
-                send_line(skt, "ERROR");
-                return false;
-            }
-            if (std::stoi(line) != 2 * client.sent_num) {
-                send_line(skt, "WRONG");
-                return false;
-            }
-            // the exchange is over either way, so the connection is closed after OK too
-            send_line(skt, "OK");
-            return false;
-        }
-    }
-    return true;
+bool handle_line(int skt, [[maybe_unused]] Client &client, const std::string &line) {
+    // No commands exist yet, so every line is an unknown command
+    std::cerr << "Unknown command from socket " << skt << ": [" << line << "]\n";
+    send_line(skt, "ERROR");
+    return false;
 }
 
 int main(int argc, char *argv[]) {
-    srand(time(nullptr));
     if (argc != 3) {
         std::cerr << "Running server requires IP address and port specified in args\n";
         exit(EXIT_FAILURE);
