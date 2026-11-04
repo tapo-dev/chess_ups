@@ -10,7 +10,7 @@ The server has a fixed number of rooms (1–20, set at start), each for two play
 
 - One message is one line: `OPCODE ARG1 ARG2 ...\n`, with exactly one space between the parts.
 - ASCII only, no `\r`. Opcodes are upper case.
-- Maximum length: 256 characters from the client, 1024 from the server (because of the room list).
+- Maximum length: 1024 characters from the client, 1024 from the server (because of the room list).
 - No value can contain a space or `\n`, so nothing has to be escaped.
 
 Values:
