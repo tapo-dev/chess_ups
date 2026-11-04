@@ -15,8 +15,23 @@ struct Client {
     std::string inbuf;  // received bytes that do not form a complete line yet
 };
 
+struct Config {
+    std::string address;
+    int port;
+    int room_count;
+    int max_players;
+};
+
 // Longest unfinished line a client may keep in its buffer
-const size_t MAX_LINE_LENGTH = 256;
+const size_t MAX_LINE_LENGTH = 1024;
+
+// Allowed values of the start arguments based on protocol.md
+const int MIN_PORT = 1;
+const int MAX_PORT = 65535;
+const int MIN_ROOMS = 1;
+const int MAX_ROOMS = 20;
+const int MIN_PLAYER_LIMIT = 2;
+const int MAX_PLAYER_LIMIT = 100;
 
 // Sends one line (adds the '\n') and returns false if it could not be sent whole
 bool send_line(int fd, const std::string &text) {
@@ -77,6 +92,16 @@ bool is_number(const std::string &s) {
     return true;
 }
 
+// Checks that a start argument lies between min and max (inclusive);
+// prints what is wrong and returns false if it does not
+static bool check_range(const char *name, int value, int min, int max) {
+    if (value < min || value > max) {
+        std::cerr << "The " << name << " must be between " << min << " and " << max << "\n";
+        return false;
+    }
+    return true;
+}
+
 // Reacts to one complete line from the client.
 // Returns false when the connection should be closed.
 bool handle_line(int skt, [[maybe_unused]] Client &client, const std::string &line) {
@@ -87,16 +112,36 @@ bool handle_line(int skt, [[maybe_unused]] Client &client, const std::string &li
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 3) {
-        std::cerr << "Running server requires IP address and port specified in args\n";
+    std::string usage_msg = "Usage: ./server <address> <port> <rooms> <max_players>\n"
+                            "Example: ./server 127.0.0.1 10000 5 20\n";
+    // sanity check
+    if (argc != 5) {
+        std::cerr << "Running server requires IP address, port, room count and max players specified in args\n";
+        std::cerr << usage_msg;
         exit(EXIT_FAILURE);
     }
-    int port = atoi(argv[2]);
-    if (port < 1 || port > 65535) {
-        std::cerr << "Invalid port\n";
-        exit(EXIT_FAILURE);
+    for (int i = 2; i < argc; i++) {
+        bool num_check = is_number(argv[i]);
+        if (!num_check) {
+            std::cerr << "One or more invalid argument formats\n";
+            std::cerr << usage_msg;
+            exit(EXIT_FAILURE);
+        }
     }
     
+
+    // init a config; is_number above guarantees atoi gets only digits
+    int port = atoi(argv[2]);
+    int room_count = atoi(argv[3]);
+    int max_players = atoi(argv[4]);
+    if (!check_range("port", port, MIN_PORT, MAX_PORT) ||
+        !check_range("room count", room_count, MIN_ROOMS, MAX_ROOMS) ||
+        !check_range("player limit", max_players, MIN_PLAYER_LIMIT, MAX_PLAYER_LIMIT)) {
+        std::cerr << usage_msg;
+        exit(EXIT_FAILURE);
+    }
+    Config config = Config{argv[1], port, room_count, max_players};
+
     // create the socket (ask the system to create it)
     // AF_INET = IPv4, SOCK_STREAM = TCP (stream service), 0 = default protocol
     int skt = socket(AF_INET, SOCK_STREAM, 0);
@@ -108,10 +153,11 @@ int main(int argc, char *argv[]) {
     // prepare the structure with the address we want to listen on
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(port); // htons = host to network short (converts the port to network byte order - big-endian)
+    addr.sin_port = htons(config.port); // htons = host to network short (converts the port to network byte order - big-endian)
     // inet_pton = converts an IP address from text to binary form
-    if (inet_pton(AF_INET, argv[1], &addr.sin_addr) <= 0) {
+    if (inet_pton(AF_INET, config.address.c_str(), &addr.sin_addr) <= 0) {
         std::cerr << "Wrong IP address format\n";
+        std::cerr << usage_msg;
         exit(EXIT_FAILURE);
     }
 
@@ -136,7 +182,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Listening on %s:%d\n", argv[1], port);
+    printf("Listening on %s:%d\n", config.address.c_str(), config.port);
 
     std::vector<pollfd> fds;
     std::unordered_map<int, Client> clients;

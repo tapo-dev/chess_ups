@@ -4,7 +4,7 @@
 
 Chess for two players, simplified: no castling, no en passant, and a pawn reaching the last rank always becomes a queen. A game ends with checkmate, stalemate (draw), resignation, or when the opponent leaves. There are no draw offers and no clock. After the game both players are back in the lobby.
 
-The server has a fixed number of rooms (1–20, set at start), each for two players. The first player in a room plays white; the game starts when the second one joins.
+The server has a fixed number of rooms (1–20, set at start), each for two players. The first player in a room plays white; the game starts when the second one joins. The total number of logged-in players, in the lobby and in games together, is limited (2–100, set at start).
 
 ## Message format
 
