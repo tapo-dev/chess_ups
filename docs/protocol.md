@@ -55,7 +55,7 @@ Every request gets exactly one reply: the one in the table, or `ERR <code>`. Apa
 | `ROOM_FULL` | the room is full | no |
 | `SERVER_FULL` | the player limit is reached; the server closes the connection | no |
 
-After the 3rd strike the server closes the connection and removes the player; in a game the opponent wins (`OPPONENT_LEFT`). A line longer than 256 characters closes the connection at once. The client handles invalid messages from the server the same way.
+After the 3rd strike the server closes the connection and removes the player; in a game the opponent wins (`OPPONENT_LEFT`). A line longer than 1024 characters closes the connection at once. The client handles invalid messages from the server the same way.
 
 ## States
 
