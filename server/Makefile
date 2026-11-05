@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -g
+CXXFLAGS = -std=c++17 -Wall -Wextra -Wshadow -g
 
 # Every .cpp in this directory is a module of the server
 SRCS = $(wildcard *.cpp)
