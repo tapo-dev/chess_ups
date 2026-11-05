@@ -5,10 +5,12 @@
 #include <vector>
 #include <unordered_map>
 
-#include <arpa/inet.h>  // inet_pton, htons, struct sockaddr_in
 #include <sys/socket.h> // socket, bind, listen, accept, send, recv
 #include <unistd.h>     // close
 #include <poll.h>       // poll
+
+#include "network.h"
+#include "message.h"
 
 // Everything the server remembers about one connected client
 struct Client {
@@ -22,9 +24,6 @@ struct Config {
     int max_players;
 };
 
-// Longest unfinished line a client may keep in its buffer
-const size_t MAX_LINE_LENGTH = 1024;
-
 // Allowed values of the start arguments based on protocol.md
 const int MIN_PORT = 1;
 const int MAX_PORT = 65535;
@@ -32,65 +31,6 @@ const int MIN_ROOMS = 1;
 const int MAX_ROOMS = 20;
 const int MIN_PLAYER_LIMIT = 2;
 const int MAX_PLAYER_LIMIT = 100;
-
-// Sends one line (adds the '\n') and returns false if it could not be sent whole
-bool send_line(int fd, const std::string &text) {
-    printf("Sent to socket %d: [%s]\n", fd, text.c_str());
-    std::string text_to_send = text + "\n";
-    ssize_t bytes_sent = send(fd, text_to_send.data(), text_to_send.size(), MSG_NOSIGNAL);
-    if (bytes_sent != (ssize_t)text_to_send.size()) {
-        return false;
-    }
-    return true;
-}
-
-// Reads what is waiting on the socket and moves every complete line
-// from the clients buffer to lines
-bool read_lines(int skt, Client &client, std::vector<std::string> &lines) {
-    char buffer[1024];
-    ssize_t size_received = recv(skt, buffer, sizeof(buffer), 0);
-    // Either error or client closed the connection
-    if (size_received < 0) {
-        perror("recv");
-        return false;
-    }
-    if (size_received == 0) {
-        return false;
-    }
-
-    client.inbuf.append(buffer, size_received);
-
-    size_t line_end;
-    while ((line_end = client.inbuf.find('\n')) != std::string::npos) {
-        lines.push_back(client.inbuf.substr(0, line_end));
-        client.inbuf.erase(0, line_end + 1);
-    }
-
-    // What is left is an unfinished line; refuse to store it forever
-    if (client.inbuf.size() > MAX_LINE_LENGTH) {
-        std::cerr << "Line too long (socket " << skt << ")\n";
-        send_line(skt, "ERROR");
-        return false;
-    }
-
-    return true;
-}
-
-// Helper to check whether a string contains only a number or also characters
-bool is_number(const std::string &s) {
-    if (s == "") {
-        return false;
-    }
-    if (s.size() > 9) {
-        return false;
-    }
-    for (char c : s) {
-        if (c < '0' || c > '9') {
-            return false;
-        }
-    }
-    return true;
-}
 
 // Checks that a start argument lies between min and max (inclusive);
 // prints what is wrong and returns false if it does not
@@ -129,7 +69,6 @@ int main(int argc, char *argv[]) {
         }
     }
     
-
     // init a config; is_number above guarantees atoi gets only digits
     int port = atoi(argv[2]);
     int room_count = atoi(argv[3]);
@@ -142,43 +81,10 @@ int main(int argc, char *argv[]) {
     }
     Config config = Config{argv[1], port, room_count, max_players};
 
-    // create the socket (ask the system to create it)
-    // AF_INET = IPv4, SOCK_STREAM = TCP (stream service), 0 = default protocol
-    int skt = socket(AF_INET, SOCK_STREAM, 0);
-    if (skt < 0) {
-        perror("socket");
-        exit(EXIT_FAILURE);
-    }
+    int skt = create_listen_socket(config.address, config.port);
 
-    // prepare the structure with the address we want to listen on
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(config.port); // htons = host to network short (converts the port to network byte order - big-endian)
-    // inet_pton = converts an IP address from text to binary form
-    if (inet_pton(AF_INET, config.address.c_str(), &addr.sin_addr) <= 0) {
-        std::cerr << "Wrong IP address format\n";
+    if (skt == -1) {
         std::cerr << usage_msg;
-        exit(EXIT_FAILURE);
-    }
-
-    int optval = 1;
-    // socket option that frees the address and port as soon as the socket is closed (otherwise we would have to wait until the system releases them)
-    if (setsockopt(skt, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
-        perror("setsockopt");
-        exit(EXIT_FAILURE);
-    }
-
-    // assign the socket the address we want to listen on
-    // note: we are not listening yet, this only "binds" the socket to the address
-    if (bind(skt, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        perror("bind");
-        exit(EXIT_FAILURE);
-    }
-
-    // start listening on the socket we created and bound to the address
-    // this also creates the queue of incoming connections (second parameter, here 5) - how many connections may wait until the server accepts them
-    if (listen(skt, 5) < 0) {
-        perror("listen");
         exit(EXIT_FAILURE);
     }
 
@@ -215,7 +121,7 @@ int main(int argc, char *argv[]) {
                     // receive data from the client
                     int client_skt = fds[i].fd;
                     std::vector<std::string> lines;
-                    bool keep_client = read_lines(client_skt, clients[client_skt], lines);
+                    bool keep_client = read_lines(client_skt, clients[client_skt].inbuf, lines);
 
                     for (const std::string &line : lines) {
                         printf("Received from socket %d: [%s]\n", client_skt, line.c_str());
@@ -239,8 +145,4 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-
-    close(skt);
-
-    return 0;
 }
