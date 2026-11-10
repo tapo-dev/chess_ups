@@ -21,31 +21,63 @@ bool Server::accept_client() {
     }
 
     printf("Client connected (socket %d)\n", client_skt);
-    clients[client_skt] = Client{};
-    fds.push_back({client_skt, POLLIN, 0});
+    // the new client gets into the poll list at the next pass of run()
+    Client client;
+    client.fd = client_skt;
+    clients[client_skt] = client;
     return true;
 }
 
-bool Server::read_from_client(int client_skt) {
+void Server::read_from_client(Client &client) {
     std::vector<std::string> lines;
-    bool keep_client = read_lines(client_skt, clients[client_skt].inbuf, lines);
-
-    for (const std::string &line : lines) {
-        printf("Received from socket %d: [%s]\n", client_skt, line.c_str());
-        if (!handle_line(client_skt, clients[client_skt], line)) {
-            keep_client = false;
-            break;
-        }
+    // false = connection closed, broken, or a line too long
+    if (!read_lines(client.fd, client.inbuf, lines)) {
+        client.closing = true;
+        return;
     }
 
-    return keep_client;
+    for (const std::string &line : lines) {
+        printf("Received from socket %d: [%s]\n", client.fd, line.c_str());
+        handle_line(client, line);
+        // a client that is being disconnected gets no more answers
+        if (client.closing) {
+            return;
+        }
+    }
 }
 
-bool Server::handle_line(int skt, [[maybe_unused]] Client &client, const std::string &line) {
+void Server::handle_line(Client &client, const std::string &line) {
     // No commands exist yet, so every line is an unknown command
-    std::cerr << "Unknown command from socket " << skt << ": [" << line << "]\n";
-    send_line(skt, "ERROR");
-    return false;
+    std::cerr << "Unknown command from socket " << client.fd << ": [" << line << "]\n";
+    send_to(client, "ERROR");
+    client.closing = true;
+}
+
+void Server::send_to(Client &client, const std::string &text) {
+    // a client that is being disconnected gets nothing more
+    if (client.closing) {
+        return;
+    }
+    // send_line fails when the connection is broken or the client does not read
+    // what we send; either way the client cannot be used anymore
+    if (!send_line(client.fd, text)) {
+        std::cerr << "Sending to socket " << client.fd << " failed\n";
+        client.closing = true;
+    }
+}
+
+// Close and erase all clients with the closing tag
+void Server::remove_closing_clients() {
+    for (auto it = clients.begin(); it != clients.end(); ) {
+        if (it->second.closing) {
+            std::cout << "Client disconnected (socket " << it->first << ")\n";
+            close(it->first);
+            it = clients.erase(it);
+        }
+        else {
+            it++;
+        }
+    }
 }
 
 bool Server::start() {
@@ -57,36 +89,53 @@ bool Server::start() {
 }
 
 bool Server::run() {
-    // at the start there is only the server socket, which listens for incoming connections
-    fds.push_back({listen_fd, POLLIN, 0});
+    std::vector<pollfd> fds;
 
     while (1) {
+        // Clear fds and then refill
+        fds.clear();
+        fds.push_back({listen_fd, POLLIN, 0}); // listening socket
+        for (auto &[fd, client] : clients) {
+            fds.push_back({fd, POLLIN, 0});
+        }
+
         int ret = poll(fds.data(), fds.size(), -1);
         if (ret < 0) {
             perror("poll");
             return false;
         }
 
-        for (size_t i = 0; i < fds.size(); i++) {
-            if (fds[i].revents & POLLIN) {
-                if (fds[i].fd == listen_fd) {
+        // fds is not changed in this loop, and clients are only marked, never erased,
+        // so every client socket in fds is still in clients
+        for (const pollfd &entry : fds) {
+            // nothing happened on this socket
+            if (entry.revents == 0) {
+                continue;
+            }
+
+            if (entry.fd == listen_fd) {
+                if (entry.revents & POLLIN) {
                     accept_client();
                 } else {
-                    int client_skt = fds[i].fd;
-                    bool keep_client = read_from_client(client_skt);
-
-                    if (!keep_client) {
-                        // the client closed the connection or an error occurred (outage, ...)
-                        printf("Client disconnected (socket %d)\n", client_skt);
-                        close(client_skt);
-
-                        clients.erase(client_skt);
-                        // remove the socket; erase shifts all the following ones one position back
-                        fds.erase(fds.begin() + i);
-                        i--; // step the index back so the next iteration checks the socket that moved to position i
-                    }
+                    // the server cannot work without its listening socket
+                    std::cerr << "Listening socket failed\n";
+                    return false;
                 }
+                continue;
+            }
+
+            Client &client = clients.at(entry.fd);
+            if (client.closing) {
+                continue;
+            }
+            
+            if (entry.revents & POLLIN) {
+                read_from_client(client);
+            } else if (entry.revents & (POLLHUP | POLLERR | POLLNVAL)) {
+                client.closing = true;
             }
         }
+
+        remove_closing_clients();
     }
 }

@@ -13,7 +13,7 @@
 bool send_line(int fd, const std::string &text) {
     printf("Sent to socket %d: [%s]\n", fd, text.c_str());
     std::string text_to_send = text + "\n";
-    ssize_t bytes_sent = send(fd, text_to_send.data(), text_to_send.size(), MSG_NOSIGNAL);
+    ssize_t bytes_sent = send(fd, text_to_send.data(), text_to_send.size(), MSG_NOSIGNAL | MSG_DONTWAIT);
     if (bytes_sent != (ssize_t)text_to_send.size()) {
         return false;
     }
@@ -22,6 +22,7 @@ bool send_line(int fd, const std::string &text) {
 
 // Reads what is waiting on the socket and moves every complete line
 // from the clients buffer to lines
+// Returns false if the client throws an error or closes
 bool read_lines(int skt, std::string &inbuf, std::vector<std::string> &lines) {
     char buffer[1024];
     ssize_t size_received = recv(skt, buffer, sizeof(buffer), 0);
@@ -38,6 +39,12 @@ bool read_lines(int skt, std::string &inbuf, std::vector<std::string> &lines) {
 
     size_t line_end;
     while ((line_end = inbuf.find('\n')) != std::string::npos) {
+        // a complete line can be too long too: the rest of an earlier recv plus this one
+        if (line_end > MAX_LINE_LENGTH) {
+            std::cerr << "Line too long (socket " << skt << ")\n";
+            send_line(skt, "ERR BAD_MESSAGE");
+            return false;
+        }
         lines.push_back(inbuf.substr(0, line_end));
         inbuf.erase(0, line_end + 1);
     }
@@ -45,7 +52,7 @@ bool read_lines(int skt, std::string &inbuf, std::vector<std::string> &lines) {
     // What is left is an unfinished line; refuse to store it forever
     if (inbuf.size() > MAX_LINE_LENGTH) {
         std::cerr << "Line too long (socket " << skt << ")\n";
-        send_line(skt, "ERROR");
+        send_line(skt, "ERR BAD_MESSAGE");
         return false;
     }
 
