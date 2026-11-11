@@ -10,6 +10,7 @@
 
 #include "network.h"
 #include "server.h"
+#include "message.h"
 
 bool Server::accept_client() {
     // accept a connection from a client
@@ -37,20 +38,14 @@ void Server::read_from_client(Client &client) {
     }
 
     for (const std::string &line : lines) {
-        printf("Received from socket %d: [%s]\n", client.fd, line.c_str());
+        std::string printable_line = printable(line);
+        printf("Received from socket %d: [%s]\n", client.fd, printable_line.c_str());
         handle_line(client, line);
         // a client that is being disconnected gets no more answers
         if (client.closing) {
             return;
         }
     }
-}
-
-void Server::handle_line(Client &client, const std::string &line) {
-    // No commands exist yet, so every line is an unknown command
-    std::cerr << "Unknown command from socket " << client.fd << ": [" << line << "]\n";
-    send_to(client, "ERROR");
-    client.closing = true;
 }
 
 void Server::send_to(Client &client, const std::string &text) {

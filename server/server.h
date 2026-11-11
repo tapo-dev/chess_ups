@@ -2,14 +2,15 @@
 
 #include <string>
 #include <unordered_map>
-#include <vector>
-#include <poll.h>
+
+#include "message.h"
 
 // Everything the server remembers about one connected client
 struct Client {
     int fd = -1;          // the client's socket
     std::string inbuf;    // received bytes that do not form a complete line yet
     bool closing = false; // marked for disconnecting; remove_closing_clients closes it after the current pass
+    int strikes = 0; // 3 strikes and client gets disconnected
 };
 
 struct Config {
@@ -32,6 +33,12 @@ class Server {
         // Reacts to one complete line from the client.
         // To disconnect the client, it marks it closing.
         void handle_line(Client &client, const std::string &line);
+
+        // Handlers of the single requests (handlers.cpp)
+        void handle_ping(Client &client, const Message &msg);
+
+        // Sends "ERR <code>"; with strike, counts it and marks the client closing at the 3rd one
+        void send_error(Client &client, const std::string &code, bool strike);
 
         // Sends one line to the client; if that fails, marks the client closing
         void send_to(Client &client, const std::string &text);
