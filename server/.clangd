@@ -1,0 +1,5 @@
+Diagnostics:
+  # "include what you use": warn when a file uses something it only gets
+  # through another header, and when an #include is not used at all
+  MissingIncludes: Strict
+  UnusedIncludes: Strict
