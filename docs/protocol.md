@@ -15,7 +15,7 @@ The server has a fixed number of rooms (1–20, set at start), each for two play
 
 Values:
 
-- `nick`: 3–16 characters `[A-Za-z0-9_]`
+- `nick`: 3–16 characters `[A-Za-z0-9_]`. The nick identifies the player: a `LOGIN` with a nick that is already online replaces the old connection, which the server closes.
 - `room`: room number, 0 to number of rooms − 1
 - `room_entry`: `room:player1:player2`, `-` for an empty spot, player1 plays white (e.g. `3:Pepa:-`)
 - `move`: from square and to square, e.g. `e2e4`

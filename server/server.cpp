@@ -2,7 +2,7 @@
 #include <vector>
 #include <unordered_map>
 #include <cstdio>
-#include <cstdlib>
+#include <algorithm>
 
 #include <sys/socket.h> // socket, bind, listen, accept, send, recv
 #include <unistd.h>     // close
@@ -48,6 +48,19 @@ void Server::read_from_client(Client &client) {
     }
 }
 
+void Server::remove_closing_clients() {
+    for (auto it = clients.begin(); it != clients.end(); ) {
+        if (it->second.closing) {
+            std::cout << "Client disconnected (socket " << it->first << ")\n";
+            close(it->first);
+            it = clients.erase(it);
+        }
+        else {
+            it++;
+        }
+    }
+}
+
 void Server::send_to(Client &client, const std::string &text) {
     // a client that is being disconnected gets nothing more
     if (client.closing) {
@@ -61,18 +74,37 @@ void Server::send_to(Client &client, const std::string &text) {
     }
 }
 
-// Close and erase all clients with the closing tag
-void Server::remove_closing_clients() {
-    for (auto it = clients.begin(); it != clients.end(); ) {
-        if (it->second.closing) {
-            std::cout << "Client disconnected (socket " << it->first << ")\n";
-            close(it->first);
-            it = clients.erase(it);
-        }
-        else {
-            it++;
+// Name of a state for the log
+static const char *state_name(State state) {
+    switch (state) {
+        case State::LOGIN:   return "LOGIN";
+        case State::LOBBY:   return "LOBBY";
+        case State::WAITING: return "WAITING";
+        case State::IN_GAME: return "IN_GAME";
+    }
+    return "?";
+}
+
+void Server::set_state(Client &client, State state) {
+    std::cout << client.nick << " (fd " << client.fd << "): "
+              << state_name(client.state) << " -> " << state_name(state) << "\n";
+    client.state = state;
+}
+
+bool Server::is_server_full() {
+    int logged_in = std::count_if(clients.begin(), clients.end(), [](const auto& entry) {
+        return entry.second.state != State::LOGIN && !entry.second.closing;
+    });
+    return logged_in >= config.max_players;
+}
+
+Client* Server::find_client(const std::string &nick) {
+    for (auto &client : clients) {
+        if (client.second.nick == nick && !client.second.closing) {
+            return &client.second;
         }
     }
+    return nullptr;
 }
 
 bool Server::start() {

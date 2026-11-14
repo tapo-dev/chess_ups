@@ -1,8 +1,9 @@
 #include <vector>
+#include <string>
+#include <regex>
 
 #include "message.h"
 
-// Helper to check whether a string contains only a number or also characters
 bool is_number(const std::string &s) {
     if (s == "") {
         return false;
@@ -18,8 +19,6 @@ bool is_number(const std::string &s) {
     return true;
 }
 
-// parse message from client
-// returns false for invalid messages
 bool parse_message(const std::string &line, Message &msg) {
     std::string current = "";
     std::vector<std::string> parts;
@@ -54,8 +53,6 @@ bool parse_message(const std::string &line, Message &msg) {
     return true;
 }
 
-// returns a printable line from a line that could contain
-// /dev/urandom stuff that would print awkwardly in terminal
 std::string printable(const std::string &line) {
     std::string printable_line;
     for (auto c : line) {
@@ -68,4 +65,10 @@ std::string printable(const std::string &line) {
     }
 
     return printable_line;
+}
+
+bool is_valid_nick(const std::string &nick) {
+    // regex_match succeeds only if the whole nick matches
+    std::regex allowed("[A-Za-z0-9_]{3,16}");
+    return std::regex_match(nick, allowed);
 }
