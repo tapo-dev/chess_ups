@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "message.h"
 
@@ -20,6 +21,11 @@ struct Client {
     int strikes = 0; // 3 strikes and client gets disconnected
     State state = State::LOGIN;
     std::string nick;
+    int room = -1;
+};
+
+struct Room {
+    std::string white, black;
 };
 
 struct Config {
@@ -34,6 +40,7 @@ class Server {
         Config config;
         int listen_fd = -1; // start sets the socket
         std::unordered_map<int, Client> clients;
+        std::vector<Room> rooms; // can never be resized
 
         // Accept a connecting client
         bool accept_client();
@@ -56,6 +63,9 @@ class Server {
         // Check if a player with a specified nick already exists
         Client* find_client(const std::string &nick);
 
+        // Builds the response for LIST request
+        std::string rooms_message();
+
         // ALL HANDLERS
 
         // Reacts to one complete line from the client.
@@ -65,6 +75,7 @@ class Server {
         // Handlers of the single requests (handlers.cpp)
         void handle_ping(Client &client, const Message &msg);
         void handle_login(Client &client, const Message &msg);
+        void handle_list(Client &client, const Message &msg);
         void handle_logout(Client &client, const Message &msg);
 
         // Sends "ERR <code>"; with strike, counts it and marks the client closing at the 3rd one
@@ -72,7 +83,7 @@ class Server {
 
     public: 
         // Constructor
-        Server(const Config &cfg) : config(cfg) {};
+        Server(const Config &cfg) : config(cfg), rooms(cfg.room_count) {};
 
         // Create the listening socket
         bool start();

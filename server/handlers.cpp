@@ -20,8 +20,7 @@ void Server::handle_line(Client &client, const std::string &line) {
     } else if (msg.opcode == "LOGIN") {
         handle_login(client, msg);
     } else if (msg.opcode == "LIST") {
-        //TODO
-        send_error(client, "NOT_IMPLEMENTED", true);
+        handle_list(client, msg);
     } else if (msg.opcode == "JOIN") {
         //TODO
         send_error(client, "NOT_IMPLEMENTED", true);
@@ -82,6 +81,19 @@ void Server::handle_login(Client &client, const Message &msg) {
     send_to(client, "LOGIN_OK LOBBY");
     client.nick = nick;
     set_state(client, State::LOBBY);
+}
+
+// LIST, in the lobby: replies with the room list
+void Server::handle_list(Client &client, const Message &msg) {
+    if (msg.args.size() > 0) {
+        send_error(client, ERR_BAD_MESSAGE, true);
+        return;
+    } else if (client.state != State::LOBBY) {
+        send_error(client, ERR_WRONG_STATE, true);
+        return;
+    }
+
+    send_to(client, rooms_message());
 }
 
 // Logout shouldnt have any arguments

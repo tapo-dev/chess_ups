@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <cstdio>
 #include <algorithm>
+#include <string>
 
 #include <sys/socket.h> // socket, bind, listen, accept, send, recv
 #include <unistd.h>     // close
@@ -105,6 +106,17 @@ Client* Server::find_client(const std::string &nick) {
         }
     }
     return nullptr;
+}
+
+std::string Server::rooms_message() {
+    std::string msg_to_send = "ROOMS " + std::to_string(config.room_count);
+    for (int i = 0; i < config.room_count; i++) {
+        std::string room_num = std::to_string(i);
+        std::string room_white = rooms[i].white.empty() ? "-" : rooms[i].white;
+        std::string room_black = rooms[i].black.empty() ? "-" : rooms[i].black;
+        msg_to_send += " " + room_num + ":" + room_white + ":" + room_black;
+    }
+    return msg_to_send;
 }
 
 bool Server::start() {
