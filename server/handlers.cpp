@@ -22,11 +22,9 @@ void Server::handle_line(Client &client, const std::string &line) {
     } else if (msg.opcode == "LIST") {
         handle_list(client, msg);
     } else if (msg.opcode == "JOIN") {
-        //TODO
-        send_error(client, "NOT_IMPLEMENTED", true);
+        handle_join(client, msg);
     } else if (msg.opcode == "LEAVE") {
-        //TODO
-        send_error(client, "NOT_IMPLEMENTED", true);
+        handle_leave(client, msg);
     } else if (msg.opcode == "MOVE") {
         //TODO
         send_error(client, "NOT_IMPLEMENTED", true);
@@ -50,8 +48,7 @@ void Server::handle_ping(Client &client, const Message &msg) {
     send_to(client, "PONG");
 }
 
-// Checks args count, state, validity of nick, if a server is full
-// if everything is ok, reply LOGIN_OK LOBBY
+// LOGIN <nick>; in LOGIN state checks for relogin; if everything ok, change state to LOBBY
 void Server::handle_login(Client &client, const Message &msg) {
     if (msg.args.size() != 1) { 
         send_error(client, ERR_BAD_MESSAGE, true);
@@ -68,16 +65,18 @@ void Server::handle_login(Client &client, const Message &msg) {
         return;
     }
     
+    // a re-login replaces a player, so only a new nick can hit the player limit
     Client *old = find_client(nick);
-    if (old != nullptr) { // if existing nick, reconnect
-        std::cout << nick << " (fd " << old->fd << ") replaced by fd " << client.fd << "\n";
-        old->closing = true;
-    } else if (is_server_full()) {
+    if (old == nullptr && is_server_full()) {
         send_error(client, ERR_SERVER_FULL, false);
         client.closing = true;
         return;
-    } 
+    }
 
+    if (old != nullptr) { // the same nick is online: the new connection replaces the old one
+        std::cout << nick << " (fd " << old->fd << ") replaced by fd " << client.fd << "\n";
+        old->closing = true;
+    }
     send_to(client, "LOGIN_OK LOBBY");
     client.nick = nick;
     set_state(client, State::LOBBY);
@@ -85,10 +84,11 @@ void Server::handle_login(Client &client, const Message &msg) {
 
 // LIST, in the lobby: replies with the room list
 void Server::handle_list(Client &client, const Message &msg) {
-    if (msg.args.size() > 0) {
+    if (!msg.args.empty()) {
         send_error(client, ERR_BAD_MESSAGE, true);
         return;
-    } else if (client.state != State::LOBBY) {
+    }
+    if (client.state != State::LOBBY) {
         send_error(client, ERR_WRONG_STATE, true);
         return;
     }
@@ -96,24 +96,80 @@ void Server::handle_list(Client &client, const Message &msg) {
     send_to(client, rooms_message());
 }
 
-// Logout shouldnt have any arguments
-// works on any state except LOGIN
-void Server::handle_logout(Client &client, const Message &msg) {
-    if (msg.args.size() > 0) {
+// JOIN n, in the lobby: takes a seat in room n; the second player starts the game
+void Server::handle_join(Client &client, const Message &msg) {
+    if (msg.args.size() != 1 || !is_number(msg.args[0])) {
         send_error(client, ERR_BAD_MESSAGE, true);
-    } else if (client.state == State::LOGIN) {
-        send_error(client, ERR_WRONG_STATE, true);
-    } else {
-        send_to(client, "LOGOUT_OK");
-        client.closing = true;
+        return;
     }
+    if (client.state != State::LOBBY) {
+        send_error(client, ERR_WRONG_STATE, true);
+        return;
+    }
+
+    int room_num = std::stoi(msg.args[0]);
+    if (room_num >= config.room_count) {
+        send_error(client, ERR_INVALID_ROOM, true);
+        return;
+    }
+    Room &room = rooms[room_num];
+    if (!room.black.empty()) { // if black is not empty, the game must have started
+        send_error(client, ERR_ROOM_FULL, false);
+        return;
+    }
+
+    // the reply first, then the events it causes
+    client.room = room_num;
+    send_to(client, "JOIN_OK " + std::to_string(room_num));
+    if (room.white.empty()) {
+        room.white = client.nick;
+        set_state(client, State::WAITING);
+    } else {
+        room.black = client.nick;
+        start_game(room);
+    }
+    broadcast_rooms();
+}
+
+// LEAVE, while waiting alone in a room: frees the seat and goes back to the lobby
+void Server::handle_leave(Client &client, const Message &msg) {
+    if (!msg.args.empty()) {
+        send_error(client, ERR_BAD_MESSAGE, true);
+        return;
+    }
+    if (client.state != State::WAITING) {
+        send_error(client, ERR_WRONG_STATE, true);
+        return;
+    }
+
+    rooms[client.room].white.clear(); // a waiting player is always white
+    client.room = -1;
+    send_to(client, "LEAVE_OK");
+    set_state(client, State::LOBBY);
+    broadcast_rooms(); // the room is free again; the leaver is in the lobby now and gets it too
+}
+
+// LOGOUT, in any state except LOGIN: replies LOGOUT_OK and closes the connection
+void Server::handle_logout(Client &client, const Message &msg) {
+    if (!msg.args.empty()) {
+        send_error(client, ERR_BAD_MESSAGE, true);
+        return;
+    }
+    if (client.state == State::LOGIN) {
+        send_error(client, ERR_WRONG_STATE, true);
+        return;
+    }
+
+    send_to(client, "LOGOUT_OK");
+    client.closing = true;
 }
 
 void Server::send_error(Client &client, const std::string &code, bool strike) {
     send_to(client, "ERR " + code);
-    if (strike) {
-        client.strikes++;
+    if (!strike) {
+        return;
     }
+    client.strikes++;
     if (client.strikes >= 3) {
         client.closing = true;
     }

@@ -66,6 +66,12 @@ class Server {
         // Builds the response for LIST request
         std::string rooms_message();
 
+        // Sends the room list to every client in the lobby; call it after every change of a room
+        void broadcast_rooms();
+
+        // Starts the game in a full room: GAME_START to both players
+        void start_game(Room &room);
+
         // ALL HANDLERS
 
         // Reacts to one complete line from the client.
@@ -76,6 +82,8 @@ class Server {
         void handle_ping(Client &client, const Message &msg);
         void handle_login(Client &client, const Message &msg);
         void handle_list(Client &client, const Message &msg);
+        void handle_join(Client &client, const Message &msg);
+        void handle_leave(Client &client, const Message &msg);
         void handle_logout(Client &client, const Message &msg);
 
         // Sends "ERR <code>"; with strike, counts it and marks the client closing at the 3rd one

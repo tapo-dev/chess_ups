@@ -119,6 +119,30 @@ std::string Server::rooms_message() {
     return msg_to_send;
 }
 
+void Server::broadcast_rooms() {
+    std::string rooms_msg = rooms_message();
+    for (auto &[fd, client] : clients) {
+        if (client.state == State::LOBBY) {
+            send_to(client, rooms_msg);
+        }
+    }
+}
+
+// Starts the game in a full room: both players go to IN_GAME and get GAME_START
+void Server::start_game(Room &room) {
+    // find_client skips players marked closing in this pass; the sweep deals with them
+    Client *white = find_client(room.white);
+    Client *black = find_client(room.black);
+    if (white != nullptr) {
+        set_state(*white, State::IN_GAME);
+        send_to(*white, "GAME_START WHITE " + room.black);
+    }
+    if (black != nullptr) {
+        set_state(*black, State::IN_GAME);
+        send_to(*black, "GAME_START BLACK " + room.white);
+    }
+}
+
 bool Server::start() {
     listen_fd = create_listen_socket(config.address, config.port);
     if (listen_fd == -1) {
