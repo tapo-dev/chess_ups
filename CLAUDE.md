@@ -17,6 +17,7 @@ The course assignment is in `docs/PozadavkyUPS.pdf` (Czech).
 - Write whole functions or files only when explicitly asked to.
 - Snippets of a few lines are fine to illustrate a point.
 - Explain the language and socket concepts involved.
+- A question asked in the middle of unfinished work ("why does this not compile") gets an answer to that question only. List the other problems in the half-written code only when a review is asked for.
 
 **Client (Unity):** the developer knows Unity well, so the client is less strict. Skip the Unity basics.
 
@@ -37,7 +38,9 @@ The server's modules: `main.cpp` (arguments → `Config`), `network` (listening 
 
 `client/` is still the empty Unity template: one sample scene, no scripts yet.
 
-Documentation in `docs/` is written in English and kept short.
+Documentation in `docs/` is written in English and kept short: about a classmate's one-page README, with one table rather than several and no design-rationale or scenario chapters. A long, polished spec would not look student-written. Explain the reasoning in chat instead, so the developer can defend it orally.
+
+The state diagram's draw.io source is embedded in `docs/state_diagram.drawio.png` (an `mxfile` tEXt chunk), so it is edited by opening the PNG in draw.io.
 
 ## Build and run
 
