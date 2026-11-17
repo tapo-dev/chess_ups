@@ -72,3 +72,29 @@ bool is_valid_nick(const std::string &nick) {
     std::regex allowed("[A-Za-z0-9_]{3,16}");
     return std::regex_match(nick, allowed);
 }
+
+bool is_valid_move(const std::string &move) {
+    if (move.size() != 4) {
+        return false;
+    }
+
+    const char first_c = move[0];
+    const char second_c = move[1];
+    const char third_c = move[2];
+    const char fourth_c = move[3];
+
+    if ((first_c < 'a' || first_c > 'h') ||
+        (third_c < 'a' || third_c > 'h')) {
+        return false;
+    }
+    if ((second_c < '1' || second_c > '8') ||
+        (fourth_c < '1' || fourth_c > '8')) {
+        return false;
+    }
+
+    if (first_c == third_c && second_c == fourth_c) { // from and to are the same square
+        return false;
+    }
+
+    return true;
+}

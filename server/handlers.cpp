@@ -26,8 +26,7 @@ void Server::handle_line(Client &client, const std::string &line) {
     } else if (msg.opcode == "LEAVE") {
         handle_leave(client, msg);
     } else if (msg.opcode == "MOVE") {
-        //TODO
-        send_error(client, "NOT_IMPLEMENTED", true);
+        handle_move(client, msg);
     } else if (msg.opcode == "RESIGN") {
         //TODO
         send_error(client, "NOT_IMPLEMENTED", true);
@@ -145,6 +144,41 @@ void Server::handle_leave(Client &client, const Message &msg) {
 
     send_to(client, "LEAVE_OK");
     remove_from_room(client);
+}
+
+// MOVE m, in a game on the player's turn: MOVE_OK to the mover, OPPONENT_MOVED m to the opponent
+// (only the format is checked; the rules of chess come in part 2)
+void Server::handle_move(Client &client, const Message &msg) {
+    if (msg.args.size() != 1) {
+        send_error(client, ERR_BAD_MESSAGE, true);
+        return;
+    }
+    if (client.state != State::IN_GAME) {
+        send_error(client, ERR_WRONG_STATE, true);
+        return;
+    }
+
+    const std::string &move = msg.args[0];
+    if (!is_valid_move(move)) {
+        send_error(client, ERR_BAD_MESSAGE, true);
+        return;
+    }
+
+    Room &room = rooms[client.room];
+    bool is_white = (client.nick == room.white);
+    if (is_white != room.white_to_move) { // not this player's turn
+        send_error(client, ERR_WRONG_STATE, true);
+        return;
+    }
+
+    // the reply first, then the event it causes
+    send_to(client, "MOVE_OK");
+    // the opponent is nullptr if it was marked closing earlier in this pass
+    Client *opponent = find_client(is_white ? room.black : room.white);
+    if (opponent != nullptr) {
+        send_to(*opponent, "OPPONENT_MOVED " + move);
+    }
+    room.white_to_move = !room.white_to_move;
 }
 
 // LOGOUT, in any state except LOGIN: replies LOGOUT_OK and closes the connection

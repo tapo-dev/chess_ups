@@ -30,3 +30,7 @@ std::string printable(const std::string &line);
 // checks a valid nick based on the protocol
 // nick should only contain [A-Za-z0-9_] and have 3-16 chars
 bool is_valid_nick(const std::string &nick);
+
+// checks the validity of a move
+// 4 chars: a-h 1-8 a-h 1-8, from != to (does not check the rules of chess)
+bool is_valid_move(const std::string &move);

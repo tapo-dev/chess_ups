@@ -162,6 +162,7 @@ void Server::end_game(Room &room, const std::string &winner, const std::string &
     room.white.clear();
     room.black.clear();
 
+    room.white_to_move = true;
     broadcast_rooms(); // after the state change, so both players get the room list too
 }
 
