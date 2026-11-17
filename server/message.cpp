@@ -68,8 +68,9 @@ std::string printable(const std::string &line) {
 }
 
 bool is_valid_nick(const std::string &nick) {
-    // regex_match succeeds only if the whole nick matches
-    std::regex allowed("[A-Za-z0-9_]{3,16}");
+    // regex_match succeeds only if the whole nick matches;
+    // static: the regex is compiled once, on the first call, and kept for the next ones
+    static const std::regex allowed("[A-Za-z0-9_]{3,16}");
     return std::regex_match(nick, allowed);
 }
 

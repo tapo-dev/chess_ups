@@ -70,7 +70,7 @@ int create_listen_socket(const std::string &address, int port) {
     }
 
     // prepare the structure with the address we want to listen on
-    struct sockaddr_in addr;
+    struct sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port); // htons = host to network short (converts the port to network byte order - big-endian)
     // inet_pton = converts an IP address from text to binary form

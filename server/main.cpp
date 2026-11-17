@@ -25,6 +25,10 @@ static bool check_range(const char *name, int value, int min, int max) {
 }
 
 int main(int argc, char *argv[]) {
+    // stdout is line-buffered only on a terminal; into a file or a pipe it would collect ~4 KB
+    // before writing, and Ctrl+C would lose it. Line-buffered: every log line is written at once
+    setvbuf(stdout, nullptr, _IOLBF, 0);
+    
     std::string usage_msg = "Usage: ./server <address> <port> <rooms> <max_players>\n"
                             "Example: ./server 127.0.0.1 10000 5 20\n";
     // sanity check

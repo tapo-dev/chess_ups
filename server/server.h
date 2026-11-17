@@ -80,6 +80,7 @@ class Server {
         // Can leave in many ways, such as LEAVE, LOGOUT, Ctrl+C / lost connection, 3rd strike
         // a line thats too long, a relogin
         void remove_from_room(Client &client);
+
         // ALL HANDLERS
 
         // Reacts to one complete line from the client.
@@ -101,7 +102,7 @@ class Server {
 
     public: 
         // Constructor
-        Server(const Config &cfg) : config(cfg), rooms(cfg.room_count) {};
+        Server(const Config &cfg) : config(cfg), rooms(cfg.room_count) {}
 
         // Create the listening socket
         bool start();

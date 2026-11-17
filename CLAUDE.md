@@ -33,18 +33,24 @@ Everything else (Makefiles, devcontainer, docs) is normal work.
 | `client/` | Unity client (Unity 6000.6, 2D URP template, new Input System only) |
 | `docs/` | Course assignment, protocol description, final documentation |
 
-`server/server.cpp` is a single-file skeleton grown out of the course's bonus task: `poll()` loop, per-client receive buffer split into lines (`read_lines`), `send_line`, and an empty `handle_line` that answers every line with `ERROR`. The chess protocol is designed in `docs/protocol.md` (with the state diagram `docs/state_diagram.drawio.png`) but not implemented yet.
+The server's modules: `main.cpp` (arguments → `Config`), `network` (listening socket, `send_line`, `read_lines`), `message` (parsing a line, value checks), `server` (the `Server` class: `poll()` loop, clients, rooms, game start and end) and `handlers.cpp` (one method per request). Every request in `docs/protocol.md` (state diagram `docs/state_diagram.drawio.png`) works, but `MOVE` checks only the format and whose turn it is. Chess rules, timeouts and reconnect are part 2, not done yet.
+
+`client/` is still the empty Unity template: one sample scene, no scripts yet.
 
 Documentation in `docs/` is written in English and kept short.
 
 ## Build and run
 
-Development happens in the devcontainer: Debian 13, g++ 14, make, gdb, valgrind, netcat, port 10000 forwarded. No Python in the container. The Unity Editor runs on the host, outside the container.
+Development happens in the devcontainer: Debian 13, g++ 14, make, gdb, valgrind, netcat, clangd, port 10000 forwarded. No Python in the container. The Unity Editor runs on the host, outside the container.
+
+Do not rebuild the devcontainer without asking: `~/.claude` is not on a volume, so a rebuild deletes the Claude chat history. Install missing tools live (`sudo apt-get install`) and add them to the Dockerfile for later.
+
+The editor uses clangd, not the C/C++ extension's IntelliSense. `server/compile_flags.txt` passes it the same flags as the Makefile, and `server/.clangd` turns on strict include checks: a file must include every header it uses itself, not get it through another header.
 
 ```sh
 cd server
-make                          # build ./server (-std=c++17 -Wall -Wextra -g)
-./server 127.0.0.1 10000      # <listen address> <port>
+make                          # build ./server (-std=c++17 -Wall -Wextra -Wshadow -g)
+./server 127.0.0.1 10000 3 10 # <listen address> <port> <rooms 1-20> <max players 2-100>
 nc 127.0.0.1 10000            # talk to it by hand
 make clean
 ```
