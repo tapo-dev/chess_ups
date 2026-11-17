@@ -28,8 +28,7 @@ void Server::handle_line(Client &client, const std::string &line) {
     } else if (msg.opcode == "MOVE") {
         handle_move(client, msg);
     } else if (msg.opcode == "RESIGN") {
-        //TODO
-        send_error(client, "NOT_IMPLEMENTED", true);
+        handle_resign(client, msg);
     } else if (msg.opcode == "LOGOUT") {
         handle_logout(client, msg);
     } else {
@@ -147,7 +146,7 @@ void Server::handle_leave(Client &client, const Message &msg) {
 }
 
 // MOVE m, in a game on the player's turn: MOVE_OK to the mover, OPPONENT_MOVED m to the opponent
-// (only the format is checked; the rules of chess come in part 2)
+// TODO: currently only checks format, not if the move is actually legal
 void Server::handle_move(Client &client, const Message &msg) {
     if (msg.args.size() != 1) {
         send_error(client, ERR_BAD_MESSAGE, true);
@@ -171,14 +170,29 @@ void Server::handle_move(Client &client, const Message &msg) {
         return;
     }
 
-    // the reply first, then the event it causes
     send_to(client, "MOVE_OK");
-    // the opponent is nullptr if it was marked closing earlier in this pass
     Client *opponent = find_client(is_white ? room.black : room.white);
     if (opponent != nullptr) {
         send_to(*opponent, "OPPONENT_MOVED " + move);
     }
     room.white_to_move = !room.white_to_move;
+}
+
+// RESIGN, in a game on either player's turn:
+// RESIGN_OK, then GAME_END to both, the opponent wins
+void Server::handle_resign(Client &client, const Message &msg) {
+    if (!msg.args.empty()) {
+        send_error(client, ERR_BAD_MESSAGE, true);
+        return;
+    }
+    if (client.state != State::IN_GAME) {
+        send_error(client, ERR_WRONG_STATE, true);
+        return;
+    }
+    send_to(client, "RESIGN_OK");
+    Room &room = rooms[client.room];
+    std::string winner = client.nick == room.white ? "BLACK" : "WHITE";
+    end_game(room, winner, "RESIGN");
 }
 
 // LOGOUT, in any state except LOGIN: replies LOGOUT_OK and closes the connection

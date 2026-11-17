@@ -93,6 +93,7 @@ class Server {
         void handle_join(Client &client, const Message &msg);
         void handle_leave(Client &client, const Message &msg);
         void handle_move(Client &client, const Message &msg);
+        void handle_resign(Client &client, const Message &msg);
         void handle_logout(Client &client, const Message &msg);
 
         // Sends "ERR <code>"; with strike, counts it and marks the client closing at the 3rd one
