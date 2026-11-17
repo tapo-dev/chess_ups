@@ -53,6 +53,7 @@ void Server::remove_closing_clients() {
     for (auto it = clients.begin(); it != clients.end(); ) {
         if (it->second.closing) {
             std::cout << "Client disconnected (socket " << it->first << ")\n";
+            remove_from_room(it->second);
             close(it->first);
             it = clients.erase(it);
         }
@@ -128,9 +129,7 @@ void Server::broadcast_rooms() {
     }
 }
 
-// Starts the game in a full room: both players go to IN_GAME and get GAME_START
 void Server::start_game(Room &room) {
-    // find_client skips players marked closing in this pass; the sweep deals with them
     Client *white = find_client(room.white);
     Client *black = find_client(room.black);
     if (white != nullptr) {
@@ -141,6 +140,50 @@ void Server::start_game(Room &room) {
         set_state(*black, State::IN_GAME);
         send_to(*black, "GAME_START BLACK " + room.white);
     }
+}
+
+void Server::end_game(Room &room, const std::string &winner, const std::string &reason) {
+    // find_client skips players marked closing (a player who is leaving), so either can be nullptr
+    Client *white = find_client(room.white);
+    Client *black = find_client(room.black);
+
+    std::string game_end_msg = "GAME_END " + winner + " " + reason;
+    if (white != nullptr) {
+        send_to(*white, game_end_msg);
+        white->room = -1;
+        set_state(*white, State::LOBBY);
+    }
+    if (black != nullptr) {
+        send_to(*black, game_end_msg);
+        black->room = -1;
+        set_state(*black, State::LOBBY);
+    }
+
+    room.white.clear();
+    room.black.clear();
+
+    broadcast_rooms(); // after the state change, so both players get the room list too
+}
+
+void Server::remove_from_room(Client &client) {
+    if (client.state == State::WAITING) {
+        rooms[client.room].white.clear(); // WAITING can only be white
+        client.room = -1;
+        set_state(client, State::LOBBY);
+        broadcast_rooms();
+        return;
+    }
+    if (client.state == State::IN_GAME) {
+        Room &room = rooms[client.room];
+        std::string winner = (client.nick == room.white) ? "BLACK" : "WHITE"; // the opponent wins
+        end_game(room, winner, "OPPONENT_LEFT");
+        // the leaver is closing, so end_game skipped it; reset it here, or a second
+        // call (re-login, then the sweep) would end whatever game is in that room by then
+        client.room = -1;
+        set_state(client, State::LOBBY);
+        return;
+    }
+    // nothing happens in states LOGIN and LOBBY
 }
 
 bool Server::start() {

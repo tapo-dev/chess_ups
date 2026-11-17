@@ -76,6 +76,7 @@ void Server::handle_login(Client &client, const Message &msg) {
     if (old != nullptr) { // the same nick is online: the new connection replaces the old one
         std::cout << nick << " (fd " << old->fd << ") replaced by fd " << client.fd << "\n";
         old->closing = true;
+        remove_from_room(*old);
     }
     send_to(client, "LOGIN_OK LOBBY");
     client.nick = nick;
@@ -142,11 +143,8 @@ void Server::handle_leave(Client &client, const Message &msg) {
         return;
     }
 
-    rooms[client.room].white.clear(); // a waiting player is always white
-    client.room = -1;
     send_to(client, "LEAVE_OK");
-    set_state(client, State::LOBBY);
-    broadcast_rooms(); // the room is free again; the leaver is in the lobby now and gets it too
+    remove_from_room(client);
 }
 
 // LOGOUT, in any state except LOGIN: replies LOGOUT_OK and closes the connection

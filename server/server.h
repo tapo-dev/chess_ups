@@ -72,6 +72,13 @@ class Server {
         // Starts the game in a full room: GAME_START to both players
         void start_game(Room &room);
 
+        // Send GAME_END msg to both players, move both to LOBBY, empty the room and call broadcast_rooms()
+        void end_game(Room &room, const std::string &winner, const std::string &reason);
+
+        // Cleanup after a player leaving a room
+        // Can leave in many ways, such as LEAVE, LOGOUT, Ctrl+C / lost connection, 3rd strike
+        // a line thats too long, a relogin
+        void remove_from_room(Client &client);
         // ALL HANDLERS
 
         // Reacts to one complete line from the client.
