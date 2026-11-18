@@ -40,7 +40,7 @@ public class LoginView : MonoBehaviour {
             return; // the form is locked while a connection attempt is running
 
         string address = addressField.text.Trim();
-        if (Uri.CheckHostName(address) == UriHostNameType.Unknown) {
+        if (!IsValidAddress(address)) {
             ShowError("Enter a valid server address (IP or hostname).");
             return;
         }
@@ -57,6 +57,27 @@ public class LoginView : MonoBehaviour {
         }
 
         ConnectRequested?.Invoke(address, port, nick);
+    }
+
+    /// <summary>
+    /// An IPv4 address a.b.c.d or a hostname.
+    /// </summary>
+    static bool IsValidAddress(string address) {
+        // Only digits and dots: must be a full IPv4 address, four parts of 0-255.
+        if (Regex.IsMatch(address, @"^[0-9.]+\z")) {
+            string[] parts = address.Split('.');
+            if (parts.Length != 4)
+                return false;
+            foreach (string part in parts) {
+                if (!byte.TryParse(part, out _))
+                    return false; // empty or above 255
+                if (part.Length > 1 && part[0] == '0')
+                    return false; // .NET would read "010" as octal, i.e. 8
+            }
+            return true;
+        }
+        // Anything else is checked as a hostname (or IPv6).
+        return Uri.CheckHostName(address) != UriHostNameType.Unknown;
     }
 
     /// <summary>Shows a neutral message, e.g. "Connecting...".</summary>
