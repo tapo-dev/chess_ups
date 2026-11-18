@@ -36,7 +36,7 @@ Everything else (Makefiles, devcontainer, docs) is normal work.
 
 The server's modules: `main.cpp` (arguments → `Config`), `network` (listening socket, `send_line`, `read_lines`), `message` (parsing a line, value checks), `server` (the `Server` class: `poll()` loop, clients, rooms, game start and end) and `handlers.cpp` (one method per request). Every request in `docs/protocol.md` (state diagram `docs/state_diagram.drawio.png`) works, but `MOVE` checks only the format and whose turn it is. Chess rules, timeouts and reconnect are part 2, not done yet.
 
-`client/` is still the empty Unity template: one sample scene, no scripts yet.
+`client/` has one scene, `Assets/Scenes/Main.unity`: uGUI with TextMeshPro, one panel per screen, switched by the client state. Only the Login panel exists (`Assets/Scripts/UI/LoginView.cs`: checks address, port and nick, raises `ConnectRequested`). The networking (`Connection`, `Message`, `Session`) is not written yet.
 
 Documentation in `docs/` is written in English and kept short: about a classmate's one-page README, with one table rather than several and no design-rationale or scenario chapters. A long, polished spec would not look student-written. Explain the reasoning in chat instead, so the developer can defend it orally.
 
